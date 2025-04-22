@@ -30,30 +30,58 @@ def precompute_rotary_emb(dim, max_positions):
     """
 
     rope_cache = None
-    # TODO: [part g]
-    ### YOUR CODE HERE ###
-    pass
-    ### END YOUR CODE ###
+    # Initialize the cache tensor
+    rope_cache = torch.zeros((max_positions, dim // 2, 2))
+    
+    # Compute theta_i for each dimension
+    # theta_i = 1/10000^(-2(i-1)/dim) for i in [1, dim/2]
+    theta = 1.0 / (10000 ** (torch.arange(0, dim // 2, dtype=torch.float) / (dim // 2)))
+    
+    # Compute position indices
+    position = torch.arange(max_positions, dtype=torch.float).unsqueeze(1)
+    
+    # Compute the product t * theta_i for all positions and dimensions
+    t_theta = position * theta.unsqueeze(0)
+    
+    # Compute cos and sin values
+    rope_cache[:, :, 0] = torch.cos(t_theta)  # cos values
+    rope_cache[:, :, 1] = torch.sin(t_theta)  # sin values
     return rope_cache
 
 
 def apply_rotary_emb(x, rope_cache):
     """Apply the RoPE to the input tensor x."""
-    # TODO: [part g]
-    # You might find the following functions useful to convert
-    # between real and complex numbers:
-
-    # torch.view_as_real - https://pytorch.org/docs/stable/generated/torch.view_as_real.html
-    # torch.view_as_complex - https://pytorch.org/docs/stable/generated/torch.view_as_complex.html
-
-    # Note that during inference, the length of the sequence might be different
-    # from the length of the precomputed values. In this case, you should use
-    # truncate the precomputed values to match the length of the sequence.
-
-    rotated_x = None
-    ### YOUR CODE HERE ###
-    pass
-    ### END YOUR CODE ###
+    # Get dimensions
+    seq_len = x.shape[1]
+    dim = x.shape[2]
+    
+    # Truncate the cache if necessary
+    rope_cache_truncated = rope_cache[:seq_len]
+    
+    # Reshape x to prepare for complex number operations
+    # First, split the embedding dimension into two parts (real and imaginary)
+    x_reshaped = x.view(*x.shape[:-1], -1, 2)
+    
+    # Convert to complex numbers
+    x_complex = torch.view_as_complex(x_reshaped)
+    
+    # Extract cos and sin from the cache
+    cos_values = rope_cache_truncated[..., 0]  # Shape: [seq_len, dim//2]
+    sin_values = rope_cache_truncated[..., 1]  # Shape: [seq_len, dim//2]
+    
+    # Create complex rotation factors: cos(θ) + i*sin(θ)
+    # This is equivalent to e^(i*θ)
+    rotation_factors = torch.complex(cos_values, sin_values)
+    
+    # Apply the rotation by multiplying with the complex rotation factors
+    # This is equivalent to multiplying by e^(i*θ)
+    x_rotated_complex = x_complex * rotation_factors.unsqueeze(0)
+    
+    # Convert back to real numbers
+    x_rotated_real = torch.view_as_real(x_rotated_complex)
+    
+    # Reshape back to original shape
+    rotated_x = x_rotated_real.reshape(*x.shape)
     return rotated_x
 
 class CausalSelfAttention(nn.Module):
@@ -75,13 +103,10 @@ class CausalSelfAttention(nn.Module):
         if self.rope:
             assert (config.n_embd % config.n_head) % 2 == 0
 
-            # TODO: [part g] Precompute the cos and sin values for RoPE and
-            # store them in rope_cache.
-            # Hint: The maximum sequence length is given by config.block_size.
-            rope_cache = None
-            ### YOUR CODE HERE ###
-            pass
-            ### END YOUR CODE ###
+            # Compute the head dimension
+            head_dim = config.n_embd // config.n_head
+            # Precompute the rotary embeddings
+            rope_cache = precompute_rotary_emb(head_dim, config.block_size)
 
             self.register_buffer("rope_cache", rope_cache)
 
@@ -104,10 +129,9 @@ class CausalSelfAttention(nn.Module):
         v = self.value(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
         if self.rope:
-            # TODO: [part g] Apply RoPE to the query and key.
-            ### YOUR CODE HERE ###
-            pass
-            ### END YOUR CODE ###
+            # Apply rotary embeddings to query and key
+            q = apply_rotary_emb(q, self.rope_cache)
+            k = apply_rotary_emb(k, self.rope_cache)
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
