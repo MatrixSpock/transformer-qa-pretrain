@@ -28,23 +28,25 @@ def precompute_rotary_emb(dim, max_positions):
     the cos and sin values for each position and each dimension of
     the embedding.
     """
-
-    # Initialize the cache tensor
-    rope_cache = torch.zeros((max_positions, dim // 2, 2))
     
-    # Compute theta_i for each dimension
-    # theta_i = 1/10000^(-2(i-1)/dim) for i in [1, dim/2]
-    theta = 1.0 / (10000 ** (torch.arange(0, dim // 2, dtype=torch.float) / (dim // 2)))
+    # Create position and dimension tensors
+    positions = torch.arange(max_positions).float()
+    # Create the dimension constants for each position
+    dim_tensor = torch.arange(0, dim, 2).float()
     
-    # Compute position indices
-    position = torch.arange(max_positions, dtype=torch.float).unsqueeze(1)
+    # Calculate frequencies for each dimension
+    freqs = 1.0 / (10000 ** (dim_tensor / dim))
     
-    # Compute the product t * theta_i for all positions and dimensions
-    t_theta = position * theta.unsqueeze(0)
+    # Outer product of positions and frequencies
+    # This gives us t*theta_i for all positions and dimensions
+    t_theta = torch.outer(positions, freqs)
     
-    # Compute cos and sin values
-    rope_cache[:, :, 0] = torch.cos(t_theta)  # cos values
-    rope_cache[:, :, 1] = torch.sin(t_theta)  # sin values
+    # Calculate cos and sin values
+    cos_values = torch.cos(t_theta)
+    sin_values = torch.sin(t_theta)
+    
+    # Stack them together in the last dimension
+    rope_cache = torch.stack([cos_values, sin_values], dim=-1)
     
     return rope_cache
 
