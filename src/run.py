@@ -9,6 +9,10 @@ import utils
 import torch
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
+import torch.cuda.amp as amp
+import math
+import numpy as np
+import logging
 
 random.seed(0)
 
@@ -27,17 +31,25 @@ argp.add_argument('--tb_expt_name', help='debug string for tb log.',
                   default='run')
 
 if __name__ == '__main__':
-    # This helps with multiprocessing on Windows
-    from multiprocessing import freeze_support
-    freeze_support()
-
     args = argp.parse_args()
+
+    # Enable mixed precision training for faster computation
+    torch.backends.cudnn.benchmark = True
+    use_amp = True
+    scaler = amp.GradScaler(enabled=use_amp)
 
     device = 'cpu'
     if torch.cuda.is_available():
         device = torch.cuda.current_device()
     elif torch.backends.mps.is_available() and args.variant == 'vanilla':
         device = 'mps'
+    # Try to use Intel's oneDNN optimization if available
+    if device == 'cpu':
+        try:
+            torch.backends.mkldnn.enabled = True
+            print("Intel oneDNN optimizations enabled")
+        except:
+            print("Intel oneDNN optimizations not available")
 
     # TensorBoard training log
     writer = SummaryWriter(log_dir='expt/%s/%s_%s_pt_lr_%f_ft_lr_%f' % (
