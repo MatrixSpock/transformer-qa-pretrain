@@ -27,6 +27,10 @@ argp.add_argument('--tb_expt_name', help='debug string for tb log.',
                   default='run')
 
 if __name__ == '__main__':
+    # This helps with multiprocessing on Windows
+    from multiprocessing import freeze_support
+    freeze_support()
+
     args = argp.parse_args()
 
     device = 'cpu'
