@@ -29,7 +29,6 @@ def precompute_rotary_emb(dim, max_positions):
     the embedding.
     """
 
-    rope_cache = None
     # Initialize the cache tensor
     rope_cache = torch.zeros((max_positions, dim // 2, 2))
     
@@ -46,43 +45,46 @@ def precompute_rotary_emb(dim, max_positions):
     # Compute cos and sin values
     rope_cache[:, :, 0] = torch.cos(t_theta)  # cos values
     rope_cache[:, :, 1] = torch.sin(t_theta)  # sin values
+    
     return rope_cache
 
 
 def apply_rotary_emb(x, rope_cache):
     """Apply the RoPE to the input tensor x."""
     # Get dimensions
-    seq_len = x.shape[1]
-    dim = x.shape[2]
+    B, T, hs = x.shape  # Batch, Sequence length, Head size
     
     # Truncate the cache if necessary
-    rope_cache_truncated = rope_cache[:seq_len]
+    rope_cache_truncated = rope_cache[:T]
     
-    # Reshape x to prepare for complex number operations
-    # First, split the embedding dimension into two parts (real and imaginary)
-    x_reshaped = x.view(*x.shape[:-1], -1, 2)
-    
-    # Convert to complex numbers
-    x_complex = torch.view_as_complex(x_reshaped)
+    # Reshape for proper application of rotary embeddings
+    x_reshape = x.reshape(B, T, hs // 2, 2)
     
     # Extract cos and sin from the cache
-    cos_values = rope_cache_truncated[..., 0]  # Shape: [seq_len, dim//2]
-    sin_values = rope_cache_truncated[..., 1]  # Shape: [seq_len, dim//2]
+    cos = rope_cache_truncated[..., 0]  # Shape: [T, hs//2]
+    sin = rope_cache_truncated[..., 1]  # Shape: [T, hs//2]
     
-    # Create complex rotation factors: cos(θ) + i*sin(θ)
-    # This is equivalent to e^(i*θ)
-    rotation_factors = torch.complex(cos_values, sin_values)
+    # Apply rotary embeddings using the rotation formula:
+    # [x_i, x_{i+d/2}] -> [x_i*cos - x_{i+d/2}*sin, x_i*sin + x_{i+d/2}*cos]
+    # Where d is the head dimension
     
-    # Apply the rotation by multiplying with the complex rotation factors
-    # This is equivalent to multiplying by e^(i*θ)
-    x_rotated_complex = x_complex * rotation_factors.unsqueeze(0)
+    # Prepare cos and sin for broadcasting
+    cos = cos.unsqueeze(0)  # [1, T, hs//2]
+    sin = sin.unsqueeze(0)  # [1, T, hs//2]
     
-    # Convert back to real numbers
-    x_rotated_real = torch.view_as_real(x_rotated_complex)
+    # Extract real and imaginary parts
+    x_real = x_reshape[..., 0]  # [B, T, hs//2]
+    x_imag = x_reshape[..., 1]  # [B, T, hs//2]
     
-    # Reshape back to original shape
-    rotated_x = x_rotated_real.reshape(*x.shape)
-    return rotated_x
+    # Apply rotation
+    out_real = x_real * cos - x_imag * sin
+    out_imag = x_real * sin + x_imag * cos
+    
+    # Combine and reshape back
+    out = torch.stack([out_real, out_imag], dim=-1)  # [B, T, hs//2, 2]
+    out = out.reshape(B, T, hs)
+    
+    return out
 
 class CausalSelfAttention(nn.Module):
     """
@@ -129,9 +131,10 @@ class CausalSelfAttention(nn.Module):
         v = self.value(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
         if self.rope:
-            # Apply rotary embeddings to query and key
-            q = apply_rotary_emb(q, self.rope_cache)
-            k = apply_rotary_emb(k, self.rope_cache)
+            # Apply rotary embeddings to query and key for each head separately
+            for h in range(self.n_head):
+                q[:, h] = apply_rotary_emb(q[:, h], self.rope_cache)
+                k[:, h] = apply_rotary_emb(k[:, h], self.rope_cache)
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
