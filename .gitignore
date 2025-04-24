@@ -4,8 +4,6 @@ __pycache__/
 *$py.class
 
 # Project files
-*.predictions
-*.params
 /expt
 
 # C extensions
