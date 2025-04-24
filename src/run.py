@@ -211,7 +211,7 @@ if __name__ == '__main__':
         assert args.outputs_path is not None
         assert args.reading_params_path is not None
         assert args.eval_corpus_path is not None
-        model.load_state_dict(torch.load(args.reading_params_path))
+        model.load_state_dict(torch.load(args.reading_params_path, map_location=device))
         correct = 0
         total = 0
         with open(args.outputs_path, 'w', encoding='utf-8') as fout:

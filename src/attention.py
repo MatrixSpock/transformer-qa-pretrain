@@ -53,23 +53,33 @@ def precompute_rotary_emb(dim, max_positions):
 
 
 def apply_rotary_emb(x, rope_cache):
-    """Apply the RoPE to the input tensor x."""
-    # Geting the dimensions
+    """Apply the RoPE to the input tensor x.
+    
+    This implementation treats each pair of dimensions as a complex number:
+    - Even indices (0, 2, 4...) are treated as the real part
+    - Odd indices (1, 3, 5...) are treated as the imaginary part
+    
+    The rotation is applied using the complex multiplication formula:
+    (a + bi) * (c + di) = (ac - bd) + (ad + bc)i
+    
+    Where (a + bi) is the embedding and (c + di) is cos(θ) + i*sin(θ)
+    """
+    # Getting the dimensions
     B, T, hs = x.shape  # Batch, Sequence length, Head size
     
-    # Truncate the cache if necessary here
+    # Ensure head size is even (required for complex number interpretation)
+    assert hs % 2 == 0, "Head size must be even for RoPE"
+    
+    # Truncate the cache if necessary
     rope_cache_truncated = rope_cache[:T]
     
-    # Reshape for proper application of rotary embeddings as [B, T, hs//2, 2]
+    # Reshape for proper application of rotary embeddings
+    # Treat each consecutive pair of dimensions as a complex number
     x_reshape = x.reshape(B, T, hs // 2, 2)
     
-    # Extracting the cos and sin from the cache object
+    # Extracting the cos and sin from the cache
     cos = rope_cache_truncated[..., 0]  # Shape: [T, hs//2]
     sin = rope_cache_truncated[..., 1]  # Shape: [T, hs//2]
-    
-    # (Will comment out for now - Apply rotary embeddings using the rotation formula:) 
-    # [x_i, x_{i+d/2}] -> [x_i*cos - x_{i+d/2}*sin, x_i*sin + x_{i+d/2}*cos]
-
     
     # Preparing the cos and sin for broadcasting
     cos = cos.unsqueeze(0)  # [1, T, hs//2]
@@ -79,9 +89,10 @@ def apply_rotary_emb(x, rope_cache):
     x_real = x_reshape[..., 0]  # [B, T, hs//2]
     x_imag = x_reshape[..., 1]  # [B, T, hs//2]
     
-    # Applying rotation
-    out_real = x_real * cos - x_imag * sin
-    out_imag = x_real * sin + x_imag * cos
+    # Applying rotation using complex multiplication formula:
+    # (a + bi) * (cos(θ) + i*sin(θ)) = (a*cos(θ) - b*sin(θ)) + i(a*sin(θ) + b*cos(θ))
+    out_real = x_real * cos - x_imag * sin  # Real part
+    out_imag = x_real * sin + x_imag * cos  # Imaginary part
     
     # Combining and reshaping back
     out = torch.stack([out_real, out_imag], dim=-1)  # [B, T, hs//2, 2]

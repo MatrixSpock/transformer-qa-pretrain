@@ -106,15 +106,22 @@ class CharCorruptionDataset(Dataset):
         # 1. Randomly truncate the document as specified in the assignment
         min_len = 4
         max_len = int(self.block_size * 7/8)
-        if len(document) > max_len:
-            # Choosing a random length between min_len and max_len
-            truncated_len = random.randint(min_len, max_len)
-            # Choosing a random starting point
-            start_idx = random.randint(0, len(document) - truncated_len)
-            document = document[start_idx:start_idx + truncated_len]
-        elif len(document) < min_len:
-            # If document is too short I will pad it
-            document = document + " " * (min_len - len(document))
+        
+        # Always randomly truncate to a length between min_len and max_len
+        # (or document length if shorter)
+        doc_len = len(document)
+        if doc_len < min_len:
+            # If document is too short, pad it
+            document = document + " " * (min_len - doc_len)
+            truncated_len = min_len
+        else:
+            # Choose a random length between min_len and min(max_len, doc_len)
+            truncated_len = random.randint(min_len, min(max_len, doc_len))
+            
+            if doc_len > truncated_len:
+                # If we need to truncate, choose a random starting point
+                start_idx = random.randint(0, doc_len - truncated_len)
+                document = document[start_idx:start_idx + truncated_len]
         
         # 2. Break the document into prefix, masked_content, and suffix as specified
         doc_len = len(document)
