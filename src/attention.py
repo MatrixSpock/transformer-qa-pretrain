@@ -29,60 +29,61 @@ def precompute_rotary_emb(dim, max_positions):
     the embedding.
     """
     
-    # Create position and dimension tensors
+    # We will create a position and dimension tensors here
     positions = torch.arange(max_positions).float()
-    # Create the dimension constants for each position
+    # Then we will create the dimension constants for each position 
     dim_tensor = torch.arange(0, dim, 2).float()
     
     # Calculate frequencies for each dimension
     freqs = 1.0 / (10000 ** (dim_tensor / dim))
     
-    # Outer product of positions and frequencies
-    # This gives us t*theta_i for all positions and dimensions
+    # This will be the outer product of positions and frequencies
+    # and it will give us t*theta_i for all positions and dimensions passed
     t_theta = torch.outer(positions, freqs)
     
-    # Calculate cos and sin values
+    # Calculating the  cos and sin values here
     cos_values = torch.cos(t_theta)
     sin_values = torch.sin(t_theta)
     
-    # Stack them together in the last dimension
+    # I will stack them together in the last dimension
     rope_cache = torch.stack([cos_values, sin_values], dim=-1)
     
+    #Finally return the results
     return rope_cache
 
 
 def apply_rotary_emb(x, rope_cache):
     """Apply the RoPE to the input tensor x."""
-    # Get dimensions
+    # Geting the dimensions
     B, T, hs = x.shape  # Batch, Sequence length, Head size
     
-    # Truncate the cache if necessary
+    # Truncate the cache if necessary here
     rope_cache_truncated = rope_cache[:T]
     
-    # Reshape for proper application of rotary embeddings
+    # Reshape for proper application of rotary embeddings as [B, T, hs//2, 2]
     x_reshape = x.reshape(B, T, hs // 2, 2)
     
-    # Extract cos and sin from the cache
+    # Extracting the cos and sin from the cache object
     cos = rope_cache_truncated[..., 0]  # Shape: [T, hs//2]
     sin = rope_cache_truncated[..., 1]  # Shape: [T, hs//2]
     
-    # Apply rotary embeddings using the rotation formula:
+    # (Will comment out for now - Apply rotary embeddings using the rotation formula:) 
     # [x_i, x_{i+d/2}] -> [x_i*cos - x_{i+d/2}*sin, x_i*sin + x_{i+d/2}*cos]
-    # Where d is the head dimension
+
     
-    # Prepare cos and sin for broadcasting
+    # Preparing the cos and sin for broadcasting
     cos = cos.unsqueeze(0)  # [1, T, hs//2]
     sin = sin.unsqueeze(0)  # [1, T, hs//2]
     
-    # Extract real and imaginary parts
+    # Extracting the real and imaginary parts
     x_real = x_reshape[..., 0]  # [B, T, hs//2]
     x_imag = x_reshape[..., 1]  # [B, T, hs//2]
     
-    # Apply rotation
+    # Applying rotation
     out_real = x_real * cos - x_imag * sin
     out_imag = x_real * sin + x_imag * cos
     
-    # Combine and reshape back
+    # Combining and reshaping back
     out = torch.stack([out_real, out_imag], dim=-1)  # [B, T, hs//2, 2]
     out = out.reshape(B, T, hs)
     

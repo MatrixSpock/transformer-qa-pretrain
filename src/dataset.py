@@ -100,25 +100,25 @@ class CharCorruptionDataset(Dataset):
 
     def __getitem__(self, idx):
         # TODO [part e]: see spec above
-        # 0. Get the document at the given index
+        # 0. Getting the document at the given index
         document = self.data[idx]
         
-        # 1. Randomly truncate the document
+        # 1. Randomly truncate the document as specified in the assignment
         min_len = 4
         max_len = int(self.block_size * 7/8)
         if len(document) > max_len:
-            # Choose a random length between min_len and max_len
+            # Choosing a random length between min_len and max_len
             truncated_len = random.randint(min_len, max_len)
-            # Choose a random starting point
+            # Choosing a random starting point
             start_idx = random.randint(0, len(document) - truncated_len)
             document = document[start_idx:start_idx + truncated_len]
         elif len(document) < min_len:
-            # If document is too short, pad it
+            # If document is too short I will pad it
             document = document + " " * (min_len - len(document))
         
-        # 2. Break the document into prefix, masked_content, and suffix
+        # 2. Break the document into prefix, masked_content, and suffix as specified
         doc_len = len(document)
-        # On average, masked_content should be 1/4 of the document
+        # Note: On average, masked_content should be 1/4 of the document
         # But we'll make it random with that as the average
         masked_len = max(1, min(doc_len - 2, int(random.gauss(doc_len / 4, doc_len / 8))))
         

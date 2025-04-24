@@ -109,7 +109,7 @@ if __name__ == '__main__':
         # writer=writer
 
         ### YOUR CODE HERE ###
-        # Create a trainer
+        # Creating the trainer
         train_config = trainer.TrainerConfig(
             max_epochs=650,
             batch_size=128,
@@ -122,7 +122,7 @@ if __name__ == '__main__':
             ckpt_path=args.writing_params_path
         )
         
-        # Initialize the trainer with the model and dataset
+        # Initializing the trainer with the model and dataset here
         trainer_obj = trainer.Trainer(
             model=model,
             train_dataset=pretrain_dataset,
@@ -130,7 +130,7 @@ if __name__ == '__main__':
             config=train_config
         )
         
-        # Train the model
+        # Now train the model
         trainer_obj.train()
         ### END YOUR CODE ###
     elif args.function == 'finetune':
@@ -170,20 +170,20 @@ if __name__ == '__main__':
         #     number of epochs for each case.
 
         ### YOUR CODE HERE ###
-        # Load pretrained model if specified
+        # Loading pretrained model if it was specified
         if args.reading_params_path is not None:
             model.load_state_dict(torch.load(args.reading_params_path))
             max_epochs = 10  # WITH pretrained model
         else:
             max_epochs = 75  # WITHOUT pretrained model
         
-        # Create the NameDataset for finetuning
+        # Create the NameDataset for finetuning.
         finetune_dataset = dataset.NameDataset(
             pretrain_dataset,
             open(args.finetune_corpus_path, encoding='utf-8').read()
         )
         
-        # Create a trainer
+        # Create a trainer here
         train_config = trainer.TrainerConfig(
             max_epochs=max_epochs,
             batch_size=256,
@@ -196,7 +196,7 @@ if __name__ == '__main__':
             ckpt_path=args.writing_params_path
         )
         
-        # Initialize the trainer with the model and dataset
+        # Initializing the trainer with the model and dataset
         trainer_obj = trainer.Trainer(
             model=model,
             train_dataset=finetune_dataset,
