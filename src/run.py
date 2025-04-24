@@ -211,7 +211,12 @@ if __name__ == '__main__':
         assert args.outputs_path is not None
         assert args.reading_params_path is not None
         assert args.eval_corpus_path is not None
-        model.load_state_dict(torch.load(args.reading_params_path, map_location=device))
+        # Fix the device mapping issue by converting device to a proper format for map_location
+        if isinstance(device, int):
+            device_str = f'cuda:{device}' if torch.cuda.is_available() else 'cpu'
+        else:
+            device_str = device
+        model.load_state_dict(torch.load(args.reading_params_path, map_location=device_str))
         correct = 0
         total = 0
         with open(args.outputs_path, 'w', encoding='utf-8') as fout:
